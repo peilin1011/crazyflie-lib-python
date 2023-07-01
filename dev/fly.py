@@ -1,15 +1,13 @@
 import logging
-import sys
 import time
-from threading import Event
-import math
+import numpy as np
 
 import cflib.crtp
 from cflib.crazyflie import Crazyflie
 from cflib.crazyflie.log import LogConfig
 from cflib.crazyflie.syncCrazyflie import SyncCrazyflie
-from cflib.positioning.motion_commander import MotionCommander
-from cflib.positioning.position_hl_commander import PositionHlCommander
+# from cflib.positioning.motion_commander import MotionCommander
+# from cflib.positioning.position_hl_commander import PositionHlCommander
 from cflib.utils import uri_helper
 from cflib.crazyflie.syncLogger import SyncLogger
 from pidtest import dslPIDPositionControl
@@ -26,9 +24,9 @@ vz = 0
 
 URI = uri_helper.uri_from_env(default='radio://0/80/2M/E7E7E7E704')
 
-DEFAULT_HEIGHT = 0.5
-VELOCITY = 1
-position_estimate = [0, 0]
+# DEFAULT_HEIGHT = 0.5
+# VELOCITY = 1
+# position_estimate = [0, 0]
 logging.basicConfig(level=logging.ERROR)
 
 
@@ -40,13 +38,14 @@ def log_pos_callback(timestamp, data, logconf):
     roll = data['stateEstimate.roll']
     pitch = data['stateEstimate.pitch']
     yaw = data['stateEstimate.yaw']
-    '''
     vx = data['stateEstimate.vx']
     vy = data['stateEstimate.vy']
     vz = data['stateEstimate.vz']
-    '''
+    # print(data)
 
 
+# DEBUG with high-level control
+'''
 def move_linear_simple(scf):
     with MotionCommander(scf, default_height=DEFAULT_HEIGHT) as mc:
         time.sleep(1)
@@ -56,6 +55,8 @@ def move_linear_simple(scf):
         time.sleep(1)
         mc.forward(0.5)
         time.sleep(1)
+
+
 
 def circle_right(scf, radius_m, velocity=VELOCITY, angle_degrees=360.0):
     """
@@ -82,20 +83,28 @@ def tracking():
         pc.go_to(0.0, 0.0, 1.0)
         # The Crazyflie lands when leaving this "with" section
     # When leaving this "with" section, the connection is automatically closed
+'''
 
 
 def simple_log(scf, logconf):
 
+    cur_pos = np.zeros((3, ), dtype=float)
+    cur_euler = np.zeros((3, ), dtype=float)
+    cur_vel = np.zeros((3, ), dtype=float)
     with SyncLogger(scf, logconf) as logger:
 
         for log_entry in logger:
 
-            timestamp = log_entry[0]
+            # timestamp = log_entry[0]
             data = log_entry[1]
-            logconf_name = log_entry[2]
-
-            print('[%d][%s]: %s' % (timestamp, logconf_name, data))
-            break
+            # logconf_name = log_entry[2]
+            # DEBUG
+            # print('[%d][%s]: %s' % (timestamp, logconf_name, data))
+            # break
+            cur_pos[:] = data[:3]
+            cur_euler[:] = data[3:6]
+            cur_vel[:] = data[6:9]
+            return cur_pos, cur_euler, cur_pos
 
 
 if __name__ == '__main__':
@@ -110,40 +119,32 @@ if __name__ == '__main__':
         logconf.add_variable('stateEstimate.roll', 'float')
         logconf.add_variable('stateEstimate.pitch', 'float')
         logconf.add_variable('stateEstimate.yaw', 'float')
-
         logconf.add_variable('stateEstimate.x', 'float')
         logconf.add_variable('stateEstimate.y', 'float')
         logconf.add_variable('stateEstimate.z', 'float')
-        '''
         logconf.add_variable('stateEstimate.vx', 'float')
         logconf.add_variable('stateEstimate.vy', 'float')
         logconf.add_variable('stateEstimate.vz', 'float')
-        '''
 
         scf.cf.log.add_config(logconf)
         logconf.data_received_cb.add_callback(log_pos_callback)
 
-        # 执行任务
-        logconf.start()
-        # action
+        # start fly
+        logconf.start()  # start record fly log
         cf = scf.cf
         height = 1
-        cf.commander.send_setpoint(0, 0, 0, 0)
+        cf.commander.send_setpoint(0, 0, 0, 0)  # uunlock carzyfile
 
         for i in range(500):
+            logconf.data_received_cb.add_callback(log_pos_callback)
+            cur_pos, cur_euler, cur_vel = simple_log(
+                scf, logconf)  # call back crazy state
+            thrust, target_euler, pos_e = dslPIDPositionControl(
+                cur_pos, cur_euler, cur_vel)  # get next action
+            cf.commander.send_setpoint(target_euler[0], target_euler[1], 0,
+                                       thrust)  # send command to board
+            time.sleep(0.01)
 
-            cf.commander.send_position_setpoint(0, 0, height, 0)
-            time.sleep(0.01)
-            simple_log(scf, logconf)
-        '''
-        to do: stabilizazion 
-        for i in range(500):
-            # print(logconf.data_received_cb.add_callback(log_pos_callback))
-            # thrust, target_euler, pos_e = dslPIDPositionControl(cur_pos,cur_euler,cur_vel)
-            # cf.commander.send_setpoint(target_euler[0],target_euler[1],0,thrust)
-            cf.commander.send_setpoint(0, 0, 0, 35000)
-            time.sleep(0.01)
-        '''
-        # cf.commander.send_stop_setpoint()
-        time.sleep(5)
+        cf.commander.send_stop_setpoint()
+        # time.sleep(5)
         logconf.stop()
