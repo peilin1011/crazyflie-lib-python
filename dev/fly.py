@@ -10,7 +10,7 @@ from cflib.crazyflie.syncCrazyflie import SyncCrazyflie
 # from cflib.positioning.position_hl_commander import PositionHlCommander
 from cflib.utils import uri_helper
 from cflib.crazyflie.syncLogger import SyncLogger
-# from pidtest import dslPIDPositionControl
+from pidtest import dslPIDPositionControl
 
 x = 0
 y = 0
@@ -29,7 +29,8 @@ DEFAULT_HEIGHT = 0.5
 # position_estimate = [0, 0]
 logging.basicConfig(level=logging.ERROR)
 
-
+# DEBUG with high-level control
+'''
 def log_pos_callback(timestamp, data, logconf):
     global x, y, z, roll, pitch, yaw, vx, vy, vz
     x = data['stateEstimate.x']
@@ -44,8 +45,6 @@ def log_pos_callback(timestamp, data, logconf):
     # print(data)
 
 
-# DEBUG with high-level control
-'''
 def move_linear_simple(scf):
     with MotionCommander(scf, default_height=DEFAULT_HEIGHT) as mc:
         time.sleep(1)
@@ -86,10 +85,20 @@ def tracking():
 '''
 
 
-def simple_log(scf, logconf):
+def simple_log(scf):
+
+    logconf = LogConfig(name='stateEstimate', period_in_ms=10)
+    logconf.add_variable('stateEstimate.roll', 'float')
+    logconf.add_variable('stateEstimate.pitch', 'float')
+    logconf.add_variable('stateEstimate.yaw', 'float')
+    logconf.add_variable('stateEstimate.x', 'float')
+    logconf.add_variable('stateEstimate.y', 'float')
+    logconf.add_variable('stateEstimate.z', 'float')
 
     cur_pos = np.zeros((3, ), dtype=float)
     cur_euler = np.zeros((3, ), dtype=float)
+    cur_vel = np.zeros((3, ), dtype=float)
+
     with SyncLogger(scf, logconf) as logger:
 
         for log_entry in logger:
@@ -97,7 +106,7 @@ def simple_log(scf, logconf):
             # timestamp = log_entry[0]
             data = log_entry[1]
             # logconf_name = log_entry[2]
-            # DEBUG
+            # DEBUG:
             # print('[%d][%s]: %s' % (timestamp, logconf_name, data))
             # break
 
@@ -110,13 +119,21 @@ def simple_log(scf, logconf):
 
             cur_pos = np.array([x, y, z])
             cur_euler = np.array([roll, pitch, yaw])
-            # return cur_pos, cur_euler
-            print(cur_pos, cur_euler)
-            break
+
+            # print(cur_pos, cur_euler)
+            # print(type(cur_pos))
+
+            thrust, target_euler = dslPIDPositionControl(
+                cur_pos, cur_euler, cur_vel)
+
+            return thrust, target_euler
 
 
-if __name__ == '__main__':
-    cflib.crtp.init_drivers()
+def run(scf, target_euler, thrust):
+    cf = scf.cf
+    cf.commander.send_setpoint(target_euler[0], target_euler[1], 0, thrust)
+
+def get_position(scf, logconf):
     logconf = LogConfig(name='stateEstimate', period_in_ms=10)
     logconf.add_variable('stateEstimate.roll', 'float')
     logconf.add_variable('stateEstimate.pitch', 'float')
@@ -124,33 +141,39 @@ if __name__ == '__main__':
     logconf.add_variable('stateEstimate.x', 'float')
     logconf.add_variable('stateEstimate.y', 'float')
     logconf.add_variable('stateEstimate.z', 'float')
+
+    with SyncLogger(scf, logconf) as logger:
+
+        for log_entry in logger:
+
+            # timestamp = log_entry[0]
+            data = log_entry[1]
+            # logconf_name = log_entry[2]
+            # DEBUG:
+            # print('[%d][%s]: %s' % (timestamp, logconf_name, data))
+            # break
+
+            x = data['stateEstimate.x']
+            y = data['stateEstimate.y']
+            z = data['stateEstimate.z']
+            roll = data['stateEstimate.roll']
+            pitch = data['stateEstimate.pitch']
+            yaw = data['stateEstimate.yaw']
+
+            cur_pos = np.array([x, y, z])
+            cur_euler = np.array([roll, pitch, yaw])
+            return cur_pos, cur_euler
+
+
+if __name__ == '__main__':
+    cflib.crtp.init_drivers()
     # 飞行前的安全性
     with SyncCrazyflie(URI, cf=Crazyflie(rw_cache='./cache')) as scf:
         while True:
             print('Connect Successful')
+            while (get_position(scf)[0] != np.array([1.0, 1.0, 1.5])).all():
+                thrust, target_euler = simple_log(scf)
+                run(scf, target_euler, thrust)
 
-            # start fly
-            cf = scf.cf
-            height = 1
-            cf.commander.send_setpoint(0, 0, 0, 0)  # unlock carzyfile
-            for i in range(500):
-                simple_log(scf, logconf)
-                print('iteration:', i)
-                '''
-                cur_pos, cur_euler = simple_log(
-                    scf, logconf)  # call back crazy state
-                print(cur_pos, cur_euler)
-                             
-                thrust, target_euler, pos_e = dslPIDPositionControl(
-                    cur_pos, cur_euler, cur_vel)
-                print('[%d][%s]: %s' % (target_euler[0], target_euler[1],
-                                        thrust))  # get next action
-                cf.commander.send_setpoint(target_euler[0], target_euler[1], 0,
-                                            thrust)  # send command to board
-                '''
-
-            # cf.commander.send_stop_setpoint()
-
-            # logconf.stop()
         else:
             print('Connect Failed')
