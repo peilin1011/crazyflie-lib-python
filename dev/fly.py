@@ -196,7 +196,7 @@ class Crazy_Auto:
             # Compute control signal - map errors to control signals
             if self.isEnabled:
     
-                    thrust, target_euler, pos_e = dslPIDPositionControl(cur_pos, cur_euler, cur_vel)
+                    thrust, target_euler, pos_e = dslPIDPositionControl(state)
                     #mpc
                     #mpc_policy = mpc(state[:6], target, horizon)
                     #roll_r, pitch_r, thrust_r = mpc_policy.solve()
