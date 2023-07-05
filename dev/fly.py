@@ -28,6 +28,7 @@ DEFAULT_HEIGHT = 0.5
 # VELOCITY = 1
 # position_estimate = [0, 0]
 logging.basicConfig(level=logging.ERROR)
+threshold = 0.001
 
 # DEBUG with high-level control
 '''
@@ -87,93 +88,147 @@ def tracking():
 
 def simple_log(scf):
 
-    logconf = LogConfig(name='stateEstimate', period_in_ms=10)
-    logconf.add_variable('stateEstimate.roll', 'float')
-    logconf.add_variable('stateEstimate.pitch', 'float')
-    logconf.add_variable('stateEstimate.yaw', 'float')
-    logconf.add_variable('stateEstimate.x', 'float')
-    logconf.add_variable('stateEstimate.y', 'float')
-    logconf.add_variable('stateEstimate.z', 'float')
-
     cur_pos = np.zeros((3, ), dtype=float)
     cur_euler = np.zeros((3, ), dtype=float)
     cur_vel = np.zeros((3, ), dtype=float)
+    cur_euler_rate = np.zeros((3, ), dtype=float)
 
-    with SyncLogger(scf, logconf) as logger:
+    lg_stab = LogConfig(name='state', period_in_ms=10)  # log synchronously every 2 seconds
+    lg_stab.add_variable('stateEstimate.x', 'float')
+    lg_stab.add_variable('stateEstimate.y', 'float')
+    lg_stab.add_variable('stateEstimate.z', 'float')
+
+    lg_stab.add_variable('stateEstimate.vx', 'float')
+    lg_stab.add_variable('stateEstimate.vy', 'float')
+    lg_stab.add_variable('stateEstimate.vz', 'float')
+
+    lg_stab_2 = LogConfig(name='angle', period_in_ms=10)
+    lg_stab_2.add_variable('stateEstimate.roll', 'float')
+    lg_stab_2.add_variable('stateEstimate.pitch', 'float')
+    lg_stab_2.add_variable('stateEstimate.yaw', 'float')
+
+    lg_stab_2.add_variable('extrx.rollRate', 'float')
+    lg_stab_2.add_variable('extrx.pitchRate', 'float')
+    lg_stab_2.add_variable('extrx.yawRate', 'float')
+
+    with SyncLogger(scf, [lg_stab, lg_stab_2]) as logger:
+        l = {}
 
         for log_entry in logger:
 
             # timestamp = log_entry[0]
             data = log_entry[1]
-            # logconf_name = log_entry[2]
+            logconf_name = log_entry[2]
             # DEBUG:
             # print('[%d][%s]: %s' % (timestamp, logconf_name, data))
             # break
+            l.update(data)
+            if logconf_name.name == 'angle':
 
-            x = data['stateEstimate.x']
-            y = data['stateEstimate.y']
-            z = data['stateEstimate.z']
-            roll = data['stateEstimate.roll']
-            pitch = data['stateEstimate.pitch']
-            yaw = data['stateEstimate.yaw']
+                x = l['stateEstimate.x']
+                y = l['stateEstimate.y']
+                z = l['stateEstimate.z']
+                vx = l['stateEstimate.vx']
+                vy = l['stateEstimate.vy']
+                vz = l['stateEstimate.vz']
+                roll = l['stateEstimate.roll']
+                pitch = l['stateEstimate.pitch']
+                yaw = l['stateEstimate.yaw']
+                roll_rate = l['extrx.rollRate']
+                pitch_rate = l['extrx.pitchRate']
+                yaw_rate = l['extrx.yawRate']
+                cur_pos = np.array([x, y, z])
+                cur_euler = np.array([roll, pitch, yaw])
+                cur_vel = np.array([vx, vy, vz])
+                cur_euler_rate = np.array([roll_rate, pitch_rate, yaw_rate])
 
-            cur_pos = np.array([x, y, z])
-            cur_euler = np.array([roll, pitch, yaw])
+                print(cur_pos, cur_euler, cur_vel, cur_euler_rate)
+                # print(type(cur_pos))
 
-            # print(cur_pos, cur_euler)
-            # print(type(cur_pos))
-
-            thrust, target_euler = dslPIDPositionControl(
-                cur_pos, cur_euler, cur_vel)
-
-            return thrust, target_euler
+                thrust, target_euler = dslPIDPositionControl(
+                    cur_pos, cur_euler, cur_vel)
+                if thrust >= 55000:
+                    thrust = 40000
+                elif thrust <= 0:
+                    thrust = 0
+                print('target thrust and euler:', thrust, target_euler)
+                return thrust, target_euler
 
 
 def run(scf, target_euler, thrust):
     cf = scf.cf
-    cf.commander.send_setpoint(target_euler[0], target_euler[1], 0, thrust)
+    cf.commander.send_setpoint(target_euler[0], target_euler[1], , thrust)
 
-def get_position(scf, logconf):
-    logconf = LogConfig(name='stateEstimate', period_in_ms=10)
-    logconf.add_variable('stateEstimate.roll', 'float')
-    logconf.add_variable('stateEstimate.pitch', 'float')
-    logconf.add_variable('stateEstimate.yaw', 'float')
-    logconf.add_variable('stateEstimate.x', 'float')
-    logconf.add_variable('stateEstimate.y', 'float')
-    logconf.add_variable('stateEstimate.z', 'float')
 
-    with SyncLogger(scf, logconf) as logger:
+def get_position(scf):
 
+    cur_pos = np.zeros((3, ), dtype=float)
+    cur_euler = np.zeros((3, ), dtype=float)
+    cur_vel = np.zeros((3, ), dtype=float)
+    cur_euler_rate = np.zeros((3, ), dtype=float)
+
+    lg_stab = LogConfig(name='stateEstimate',
+                        period_in_ms=10)  # log synchronously every 2 seconds
+    lg_stab.add_variable('stateEstimate.x', 'float')
+    lg_stab.add_variable('stateEstimate.y', 'float')
+    lg_stab.add_variable('stateEstimate.z', 'float')
+
+    lg_stab.add_variable('stateEstimate.vx', 'float')
+    lg_stab.add_variable('stateEstimate.vy', 'float')
+    lg_stab.add_variable('stateEstimate.vz', 'float')
+
+    lg_stab_2 = LogConfig(name='angle', period_in_ms=10)
+    lg_stab_2.add_variable('stateEstimate.roll', 'float')
+    lg_stab_2.add_variable('stateEstimate.pitch', 'float')
+    lg_stab_2.add_variable('stateEstimate.yaw', 'float')
+
+    lg_stab_2.add_variable('extrx.rollRate', 'float')
+    lg_stab_2.add_variable('extrx.pitchRate', 'float')
+    lg_stab_2.add_variable('extrx.yawRate', 'float')
+
+    with SyncLogger(scf, [lg_stab, lg_stab_2]) as logger:
+        l = {}
         for log_entry in logger:
 
-            # timestamp = log_entry[0]
+            timestamp = log_entry[0]
             data = log_entry[1]
-            # logconf_name = log_entry[2]
+            logconf_name = log_entry[2]
             # DEBUG:
             # print('[%d][%s]: %s' % (timestamp, logconf_name, data))
             # break
+            l.update(data)
 
-            x = data['stateEstimate.x']
-            y = data['stateEstimate.y']
-            z = data['stateEstimate.z']
-            roll = data['stateEstimate.roll']
-            pitch = data['stateEstimate.pitch']
-            yaw = data['stateEstimate.yaw']
+            if logconf_name.name == 'angle':
 
-            cur_pos = np.array([x, y, z])
-            cur_euler = np.array([roll, pitch, yaw])
-            return cur_pos, cur_euler
+                x = l['stateEstimate.x']
+                y = l['stateEstimate.y']
+                z = l['stateEstimate.z']
+                vx = l['stateEstimate.vx']
+                vy = l['stateEstimate.vy']
+                vz = l['stateEstimate.vz']
+                roll = l['stateEstimate.roll']
+                pitch = l['stateEstimate.pitch']
+                yaw = l['stateEstimate.yaw']
+                roll_rate = l['extrx.rollRate']
+                pitch_rate = l['extrx.pitchRate']
+                yaw_rate = l['extrx.yawRate']
+                cur_pos = np.array([x, y, z])
+                cur_euler = np.array([roll, pitch, yaw])
+                cur_vel = np.array([vx, vy, vz])
+                cur_euler_rate = np.array([roll_rate, pitch_rate, yaw_rate])
+                return cur_pos, cur_euler, cur_vel, cur_euler_rate
 
 
 if __name__ == '__main__':
     cflib.crtp.init_drivers()
     # 飞行前的安全性
     with SyncCrazyflie(URI, cf=Crazyflie(rw_cache='./cache')) as scf:
-        while True:
-            print('Connect Successful')
-            while (get_position(scf)[0] != np.array([1.0, 1.0, 1.5])).all():
-                thrust, target_euler = simple_log(scf)
-                run(scf, target_euler, thrust)
-
-        else:
-            print('Connect Failed')
+        print('Connect Successful')
+        # Unlock startup thrust protection
+        scf.cf.commander.send_setpoint(0, 0, 0, 0)
+        # print(get_position(scf)[0])
+        while (get_position(scf)[0] - np.array([1.0, 1.0, 1.5]) <
+               threshold).all():
+            print(get_position(scf)[0] - np.array([1.0, 1.0, 1.5]) < threshold)
+            thrust, target_euler = simple_log(scf)
+            run(scf, target_euler, thrust)
