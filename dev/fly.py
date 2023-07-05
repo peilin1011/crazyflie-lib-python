@@ -170,8 +170,6 @@ class Crazy_Auto:
 
         # Controller settings
         self.isEnabled = True
-        self.rate = 50 # Hz
-        self.period = 1.0 / float(self.rate)
 
 
     def _run_controller(self):
@@ -196,7 +194,7 @@ class Crazy_Auto:
             # Compute control signal - map errors to control signals
             if self.isEnabled:
     
-                    thrust, target_euler, pos_e = dslPIDPositionControl(state)
+                    a, b, c, d, e, f, g = dslPIDPositionControl(state)
                     #mpc
                     #mpc_policy = mpc(state[:6], target, horizon)
                     #roll_r, pitch_r, thrust_r = mpc_policy.solve()
