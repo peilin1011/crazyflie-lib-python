@@ -1,5 +1,5 @@
 import logging
-# import time
+import time
 import numpy as np
 import sys
 
@@ -11,9 +11,12 @@ from cflib.crazyflie.syncCrazyflie import SyncCrazyflie
 # from cflib.positioning.position_hl_commander import PositionHlCommander
 from cflib.utils import uri_helper
 from cflib.crazyflie.syncLogger import SyncLogger
-# from pidtest import dslPIDPositionControl
-sys.path.append('/Users/peilinyue/Documents/SS2023/crazyflie-lib-python/safe')
-from safe_control_gym.controllers.pid.pid import PID
+from pidtest import dslPIDPositionControl
+
+from quadrotor import quadrotor
+# from position_ctl_m import position_controller_m
+
+# quad = quadrotor()
 
 x = 0
 y = 0
@@ -26,8 +29,7 @@ vy = 0
 vz = 0
 
 URI = uri_helper.uri_from_env(default='radio://0/82/2M/E7E7E7E701')
-pid = PID()
-DEFAULT_HEIGHT = 0.5
+DEFAULT_HEIGHT = 0.8
 # VELOCITY = 1
 # position_estimate = [0, 0]
 logging.basicConfig(level=logging.ERROR)
@@ -96,7 +98,8 @@ def simple_log(scf):
     cur_vel = np.zeros((3, ), dtype=float)
     cur_euler_rate = np.zeros((3, ), dtype=float)
 
-    lg_stab = LogConfig(name='state', period_in_ms=10)  # log synchronously every 2 seconds
+    lg_stab = LogConfig(name='state',
+                        period_in_ms=10)  # log synchronously every 2 seconds
     lg_stab.add_variable('stateEstimate.x', 'float')
     lg_stab.add_variable('stateEstimate.y', 'float')
     lg_stab.add_variable('stateEstimate.z', 'float')
@@ -145,12 +148,13 @@ def simple_log(scf):
                 cur_vel = np.array([vx, vy, vz])
                 cur_euler_rate = np.array([roll_rate, pitch_rate, yaw_rate])
 
-                print(cur_pos, cur_euler, cur_vel, cur_euler_rate)
+                # print(cur_pos, cur_euler, cur_vel, cur_euler_rate)
+                print(cur_pos)
                 # print(type(cur_pos))
 
-                thrust, target_euler = pid._dslPIDAttitudeControl(
-                    cur_pos, cur_euler, cur_vel)
-                if thrust >= 55000:
+                thrust, target_euler = dslPIDPositionControl(
+                    cur_pos, cur_vel, cur_euler)
+                if thrust >= 60000:
                     thrust = 40000
                 elif thrust <= 0:
                     thrust = 0
@@ -160,7 +164,9 @@ def simple_log(scf):
 
 def run(scf, target_euler, thrust):
     cf = scf.cf
-    cf.commander.send_setpoint(target_euler[0], target_euler[1],float(0) , thrust)
+    cf.commander.send_setpoint(target_euler[0], target_euler[1],
+                               -0.001 * target_euler[2], int(thrust))
+    # cf.commander.send_position_setpoint(0, 0, 0.5, target_euler[2])
 
 
 def get_position(scf):
@@ -193,7 +199,7 @@ def get_position(scf):
         l = {}
         for log_entry in logger:
 
-            timestamp = log_entry[0]
+            # timestamp = log_entry[0]
             data = log_entry[1]
             logconf_name = log_entry[2]
             # DEBUG:
@@ -230,8 +236,12 @@ if __name__ == '__main__':
         # Unlock startup thrust protection
         scf.cf.commander.send_setpoint(0, 0, 0, 0)
         # print(get_position(scf)[0])
-        while (get_position(scf)[0] - np.array([1.0, 1.0, 1.5]) <
-               threshold).all():
-            print(get_position(scf)[0] - np.array([1.0, 1.0, 1.5]) < threshold)
-            thrust, target_euler = simple_log(scf)
+        thrust = 0
+        target_euler = np.array([0, 0, 0])
+        while True:
+
+            if (abs((get_position(scf)[0][2] - 1)) > threshold).all():
+                print(abs((get_position(scf)[0] - np.array([0.0, 0.0, 1]))) > threshold)
+                thrust, target_euler = simple_log(scf)
+                # run(scf, target_euler, thrust)
             run(scf, target_euler, thrust)

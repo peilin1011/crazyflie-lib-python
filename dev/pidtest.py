@@ -14,14 +14,14 @@ def dslPIDPositionControl(cur_pos, cur_euler, cur_vel):
         target_rpy (ndarray): (3,1)-shaped array of floats containing the desired orientation as roll, pitch, yaw.
         target_vel (ndarray): (3,1)-shaped array of floats containing the desired velocity.
 
-    Returns:‚
+    Returns:
         thrust (float): The target thrust along the drone z-axis.
         target_euler (ndarray): (3,1)-shaped array of floats containing the target roll, pitch, and yaw.
         pos_e (float): The current position error.
     '''
     '''new code'''
 
-    target_pos = np.array([1.0, 1.5, 2])
+    target_pos = np.array([0.0, 0.0, 1])
     target_vel = np.array([0.0, 0.0, 0.0])
     target_rpy = np.array([0.0, 0.0, 0.0])
     rot = R.from_euler('zyx', cur_euler, degrees=True)
