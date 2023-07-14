@@ -14,9 +14,9 @@ from cflib.crazyflie.syncLogger import SyncLogger
 from pidtest import dslPIDPositionControl
 
 from quadrotor import quadrotor
-# from position_ctl_m import position_controller_m
+from position_ctl_m import position_controller_m
 
-# quad = quadrotor()
+quad = quadrotor()
 
 x = 0
 y = 0
@@ -34,6 +34,8 @@ DEFAULT_HEIGHT = 0.8
 # position_estimate = [0, 0]
 logging.basicConfig(level=logging.ERROR)
 threshold = 0.001
+target_height = 0.5
+max_thrust = 39000
 
 # DEBUG with high-level control
 '''
@@ -149,16 +151,17 @@ def simple_log(scf):
                 cur_euler_rate = np.array([roll_rate, pitch_rate, yaw_rate])
 
                 # print(cur_pos, cur_euler, cur_vel, cur_euler_rate)
-                print(cur_pos)
+                print('cur_pos: ',cur_pos)
                 # print(type(cur_pos))
 
-                thrust, target_euler = dslPIDPositionControl(
-                    cur_pos, cur_vel, cur_euler)
+                thrust, target_euler = position_controller_m(
+                    cur_pos, cur_vel, cur_euler, quad)
+                print('calculated thrust:', thrust)
                 if thrust >= 60000:
-                    thrust = 40000
+                    thrust = max_thrust
                 elif thrust <= 0:
                     thrust = 0
-                print('target thrust and euler:', thrust, target_euler)
+                print('required thrust and euler:', thrust, target_euler)
                 return thrust, target_euler
 
 
@@ -238,10 +241,10 @@ if __name__ == '__main__':
         # print(get_position(scf)[0])
         thrust = 0
         target_euler = np.array([0, 0, 0])
-        while True:
 
-            if (abs((get_position(scf)[0][2] - 1)) > threshold).all():
-                print(abs((get_position(scf)[0] - np.array([0.0, 0.0, 1]))) > threshold)
-                thrust, target_euler = simple_log(scf)
-                # run(scf, target_euler, thrust)
+        while True:
+            if (abs(get_position(scf)[0][2] - target_height) > threshold).all():  # not reach the target postion
+                # print(abs((get_position(scf)[0] - np.array([0.0, 0.0, 1]))) > threshold).all()
+                thrust, target_euler = simple_log(scf)  # get new requiredt thrust
+
             run(scf, target_euler, thrust)

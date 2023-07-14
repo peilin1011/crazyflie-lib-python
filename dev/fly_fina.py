@@ -14,8 +14,10 @@ from cflib.crazyflie.syncLogger import SyncLogger
 from pidtest import dslPIDPositionControl
 
 from quadrotor import quadrotor
-from position_ctl_m import position_controller_m
+sys.path.append('/Users/peilinyue/Documents/SS2023/crazyflie-lib-python')
+from safe.safe_control_gym.controllers.pid.pid_run import PID
 
+pid = PID()
 quad = quadrotor()
 
 x = 0
@@ -151,10 +153,10 @@ def simple_log(scf):
                 cur_euler_rate = np.array([roll_rate, pitch_rate, yaw_rate])
 
                 # print(cur_pos, cur_euler, cur_vel, cur_euler_rate)
-                print('cur_pos: ',cur_pos)
+                print('cur_pos: ', cur_pos)
                 # print(type(cur_pos))
 
-                thrust, target_euler = position_controller_m(
+                thrust, target_euler = pid._dslPIDPositionControl(
                     cur_pos, cur_vel, cur_euler, quad)
                 print('calculated thrust:', thrust)
                 if thrust >= 60000:
@@ -243,8 +245,10 @@ if __name__ == '__main__':
         target_euler = np.array([0, 0, 0])
 
         while True:
-            if (abs(get_position(scf)[0][2] - target_height) > threshold).all():  # not reach the target postion
+            if (abs(get_position(scf)[0][2] - target_height) >
+                    threshold).all():  # not reach the target postion
                 # print(abs((get_position(scf)[0] - np.array([0.0, 0.0, 1]))) > threshold).all()
-                thrust, target_euler = simple_log(scf)  # get new requiredt thrust
+                thrust, target_euler = simple_log(
+                    scf)  # get new requiredt thrust
 
             run(scf, target_euler, thrust)
