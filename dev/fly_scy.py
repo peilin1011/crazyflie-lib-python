@@ -15,7 +15,7 @@ from pidtest import dslPIDPositionControl
 
 from quadrotor import quadrotor
 sys.path.append('/Users/peilinyue/Documents/SS2023/crazyflie-lib-python')
-from safe.safe_control_gym.controllers.pid.pid_run import PID
+from safe.safe_control_gym.controllers.pid.pid import PID
 
 pid = PID()
 quad = quadrotor()
