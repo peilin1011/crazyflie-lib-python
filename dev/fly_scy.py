@@ -1,5 +1,4 @@
 import logging
-import time
 import numpy as np
 import sys
 
@@ -11,13 +10,23 @@ from cflib.crazyflie.syncCrazyflie import SyncCrazyflie
 # from cflib.positioning.position_hl_commander import PositionHlCommander
 from cflib.utils import uri_helper
 from cflib.crazyflie.syncLogger import SyncLogger
-from pidtest import dslPIDPositionControl
 
 from quadrotor import quadrotor
+
 sys.path.append('/Users/peilinyue/Documents/SS2023/crazyflie-lib-python')
 from safe.safe_control_gym.controllers.pid.pid import PID
 
+# Initialize logging
+logging.basicConfig(level=logging.ERROR)
+
+# Set threshold and target height
+threshold = 0.001
+target_height = 0.5
+max_thrust = 39000
+
+# Create an instance of the PID controller
 pid = PID()
+# Create an instance of the quadrotor
 quad = quadrotor()
 
 x = 0
@@ -30,14 +39,9 @@ vx = 0
 vy = 0
 vz = 0
 
+# Define the connection URI and default height
 URI = uri_helper.uri_from_env(default='radio://0/82/2M/E7E7E7E701')
 DEFAULT_HEIGHT = 0.8
-# VELOCITY = 1
-# position_estimate = [0, 0]
-logging.basicConfig(level=logging.ERROR)
-threshold = 0.001
-target_height = 0.5
-max_thrust = 39000
 
 # DEBUG with high-level control
 '''
@@ -95,6 +99,7 @@ def tracking():
 '''
 
 
+# Calculate the required thrust and target attitude using PID control
 def simple_log(scf):
 
     cur_pos = np.zeros((3, ), dtype=float)
@@ -167,6 +172,7 @@ def simple_log(scf):
                 return thrust, target_euler
 
 
+# Send control commands to the drone
 def run(scf, target_euler, thrust):
     cf = scf.cf
     cf.commander.send_setpoint(target_euler[0], target_euler[1],
@@ -174,6 +180,7 @@ def run(scf, target_euler, thrust):
     # cf.commander.send_position_setpoint(0, 0, 0.5, target_euler[2])
 
 
+# Get the current position information
 def get_position(scf):
 
     cur_pos = np.zeros((3, ), dtype=float)
@@ -234,8 +241,10 @@ def get_position(scf):
 
 
 if __name__ == '__main__':
+    # Initialize the Crazyflie library
     cflib.crtp.init_drivers()
-    # 飞行前的安全性
+
+    # Establish a connection with the drone using the SyncCrazyflie class
     with SyncCrazyflie(URI, cf=Crazyflie(rw_cache='./cache')) as scf:
         print('Connect Successful')
         # Unlock startup thrust protection
@@ -245,10 +254,11 @@ if __name__ == '__main__':
         target_euler = np.array([0, 0, 0])
 
         while True:
+            # Check if the current position is close to the target height
             if (abs(get_position(scf)[0][2] - target_height) >
                     threshold).all():  # not reach the target postion
-                # print(abs((get_position(scf)[0] - np.array([0.0, 0.0, 1]))) > threshold).all()
+                # Get the new thrust and target attitude
                 thrust, target_euler = simple_log(
                     scf)  # get new requiredt thrust
-
+            # Send control commands
             run(scf, target_euler, thrust)
